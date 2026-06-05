@@ -22,6 +22,7 @@ from lib.unity.package import (
     cmd_unity_add_files,
     cmd_unity_remove_files,
     cmd_unity_list,
+    cmd_unity_structure,
 )
 
 
@@ -69,6 +70,8 @@ Examples:
   libman unity add-files MyPackage --runtime newfile.cs
   libman unity remove-files MyPackage --runtime oldfile.cs
   libman unity delete MyPackage
+  libman unity dir MyPackage
+  libman unity dir MyPackage --files
         """
     )
     parser.add_argument(
@@ -96,6 +99,11 @@ Examples:
     create_p.add_argument("name", help="PascalCase package name, e.g. Utils")
     create_p.add_argument("--runtime", nargs="*", default=[], metavar="PATH")
     create_p.add_argument("--editor", nargs="*", default=[], metavar="PATH")
+
+    # unity structure
+    struct_p = unity_sub.add_parser("dir", help="Display folder (and optionally file) tree structure of a Unity package")
+    struct_p.add_argument("name", help="Package name (folder under unity_root)")
+    struct_p.add_argument("--files", action="store_true", dest="with_files",help="Include individual file names in the tree view")
 
     # unity delete
     delete_p = unity_sub.add_parser("delete", help="Delete a Unity package")
@@ -159,9 +167,13 @@ def main():
     use_git = not args.no_git
 
     # unity list is read‑only
-    if args.command == "unity" and args.unity_command == "list":
-        cmd_unity_list(cfg)
-        return
+    if args.command == "unity":
+        if args.unity_command == "list":
+            cmd_unity_list(cfg)
+            return
+        elif args.unity_command == "dir":
+            cmd_unity_structure(cfg, None, args.name, args.with_files, dry_run)
+            return
 
     # All mutating commands use GitContext
     with GitContext(cfg, dry_run=dry_run, enabled=use_git) as git:

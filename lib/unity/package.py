@@ -250,3 +250,66 @@ def cmd_unity_list(cfg: Config) -> None:
         print(f"  {name}  v{version}  {pkg_id}  ({display})")
 
     print()
+
+
+# structure
+
+def cmd_unity_structure(
+    cfg: Config,
+    git: GitContext,
+    name: str,
+    with_files: bool,
+    dry_run: bool,
+) -> None:
+    """
+    Display folder (and optionally file) tree structure of a Unity package.
+    
+    Args:
+        cfg: Configuration object containing unity_root.
+        git: GitContext (unused, kept for signature consistency).
+        name: Package name (subfolder under unity_root).
+        with_files: If True, include file names; otherwise only directories.
+        dry_run: Not used for this read‑only command, but kept for compatibility.
+    """
+    unity_root = cfg.unity_root
+    pkg_dir = _require_package_exists(unity_root, name)
+
+    print(f"\nStructure of Unity package '{name}':\n")
+    
+    # Directories we typically want to skip when showing structure
+    SKIP_DIRS = {".git", "bin", "obj", "Library", "Temp", "Build"}
+    
+    def should_skip(path: Path) -> bool:
+        """Check if a file or directory should be skipped."""
+        # Skip .meta files
+        if path.suffix == '.meta':
+            return True
+        # Skip specific directories
+        if path.is_dir() and path.name in SKIP_DIRS:
+            return True
+        return False
+    
+    def _print_tree(path: Path, prefix: str = ""):
+        """Recursively print directory tree."""
+        # Get sorted list of children: directories first, then files
+        try:
+            children = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+        except PermissionError:
+            return
+        
+        # Filter out items we want to skip
+        children = [c for c in children if not should_skip(c)]
+        
+        for i, child in enumerate(children):
+            is_last = (i == len(children) - 1)
+            connector = "└── " if is_last else "├── "
+            
+            if child.is_dir():
+                print(f"{prefix}{connector}{child.name}/")
+                extension = "    " if is_last else "│   "
+                _print_tree(child, prefix + extension)
+            elif with_files:
+                print(f"{prefix}{connector}{child.name}")
+    
+    _print_tree(pkg_dir)
+    print()
