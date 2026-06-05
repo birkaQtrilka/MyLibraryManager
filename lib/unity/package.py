@@ -1,0 +1,218 @@
+"""
+Unity package commands.
+
+Each cmd_* function performs its file-system work and then the caller
+is responsible for calling git.commit() with an appropriate message.
+"""
+
+import json
+import shutil
+import sys
+from pathlib import Path
+
+from lib.config import Config
+from lib.git_ops import GitContext
+from lib.unity.names import derive_names, make_package_json, make_runtime_asmdef, make_editor_asmdef
+from lib.unity.files import copy_sources, remove_files
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _require_package_exists(unity_root: Path, name: str) -> Path:
+    pkg_dir = unity_root / name
+    if not pkg_dir.is_dir():
+        print(f"ERROR: Package '{name}' not found at {pkg_dir}", file=sys.stderr)
+        sys.exit(1)
+    return pkg_dir
+
+
+def _require_package_absent(unity_root: Path, name: str) -> Path:
+    pkg_dir = unity_root / name
+    if pkg_dir.exists():
+        print(f"ERROR: Package '{name}' already exists at {pkg_dir}", file=sys.stderr)
+        sys.exit(1)
+    return pkg_dir
+
+
+def _write(path: Path, content: str, dry_run: bool) -> None:
+    if dry_run:
+        print(f"  [dry-run] write {path}")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    print(f"  write {path}")
+
+
+# ── create ────────────────────────────────────────────────────────────────────
+
+def cmd_unity_create(
+    cfg: Config,
+    git: GitContext,
+    name: str,
+    runtime_sources: list[str],
+    editor_sources: list[str],
+    dry_run: bool,
+) -> None:
+    unity_root = cfg.unity_root
+    pkg_dir = _require_package_absent(unity_root, name)
+    names = derive_names(cfg, name)
+
+    print(f"\nCreating Unity package '{names.display_name}' ({names.package_id})")
+
+    runtime_dir = pkg_dir / "Runtime"
+    editor_dir = pkg_dir / "Editor"
+
+    # Folder structure
+    for d in (runtime_dir, editor_dir):
+        if not dry_run:
+            d.mkdir(parents=True, exist_ok=True)
+        else:
+            print(f"  [dry-run] mkdir {d}")
+
+    # package.json
+    _write(pkg_dir / "package.json", make_package_json(cfg, names), dry_run)
+
+    # Assembly definitions
+    _write(
+        runtime_dir / names.asmdef_runtime_file,
+        make_runtime_asmdef(names),
+        dry_run,
+    )
+    _write(
+        editor_dir / names.asmdef_editor_file,
+        make_editor_asmdef(names),
+        dry_run,
+    )
+
+    # Copy provided source files
+    if runtime_sources:
+        print(f"  Copying runtime files:")
+        copy_sources(runtime_sources, runtime_dir, dry_run)
+    if editor_sources:
+        print(f"  Copying editor files:")
+        copy_sources(editor_sources, editor_dir, dry_run)
+
+    print(f"Done. Package at: {pkg_dir}\n")
+
+
+# ── delete ────────────────────────────────────────────────────────────────────
+
+def cmd_unity_delete(
+    cfg: Config,
+    git: GitContext,
+    name: str,
+    dry_run: bool,
+) -> None:
+    unity_root = cfg.unity_root
+    pkg_dir = _require_package_exists(unity_root, name)
+
+    print(f"\nDeleting Unity package '{name}' at {pkg_dir}")
+    confirm = input("Are you sure? This cannot be undone. [y/N] ").strip().lower()
+    if confirm != "y":
+        print("Aborted.")
+        sys.exit(0)
+
+    if dry_run:
+        print(f"  [dry-run] remove {pkg_dir}")
+    else:
+        shutil.rmtree(pkg_dir)
+        print(f"  Removed {pkg_dir}")
+
+    print("Done.\n")
+
+
+# ── add-files ─────────────────────────────────────────────────────────────────
+
+def cmd_unity_add_files(
+    cfg: Config,
+    git: GitContext,
+    name: str,
+    runtime_sources: list[str],
+    editor_sources: list[str],
+    dry_run: bool,
+) -> None:
+    unity_root = cfg.unity_root
+    pkg_dir = _require_package_exists(unity_root, name)
+
+    print(f"\nAdding files to Unity package '{name}'")
+
+    if runtime_sources:
+        print(f"  Copying runtime files:")
+        copy_sources(runtime_sources, pkg_dir / "Runtime", dry_run)
+
+    if editor_sources:
+        print(f"  Copying editor files:")
+        copy_sources(editor_sources, pkg_dir / "Editor", dry_run)
+
+    if not runtime_sources and not editor_sources:
+        print("  Nothing to do — no files specified.")
+        sys.exit(0)
+
+    print("Done.\n")
+
+
+# ── remove-files ──────────────────────────────────────────────────────────────
+
+def cmd_unity_remove_files(
+    cfg: Config,
+    git: GitContext,
+    name: str,
+    runtime_names: list[str],
+    editor_names: list[str],
+    dry_run: bool,
+) -> None:
+    unity_root = cfg.unity_root
+    pkg_dir = _require_package_exists(unity_root, name)
+
+    print(f"\nRemoving files from Unity package '{name}'")
+
+    if runtime_names:
+        print(f"  From Runtime/:")
+        remove_files(runtime_names, pkg_dir / "Runtime", dry_run)
+
+    if editor_names:
+        print(f"  From Editor/:")
+        remove_files(editor_names, pkg_dir / "Editor", dry_run)
+
+    if not runtime_names and not editor_names:
+        print("  Nothing to do — no files specified.")
+        sys.exit(0)
+
+    print("Done.\n")
+
+
+# ── list ──────────────────────────────────────────────────────────────────────
+
+def cmd_unity_list(cfg: Config) -> None:
+    unity_root = cfg.unity_root
+
+    if not unity_root.is_dir():
+        print(f"Unity folder not found: {unity_root}")
+        return
+
+    packages = sorted(
+        p for p in unity_root.iterdir()
+        if p.is_dir() and (p / "package.json").exists()
+    )
+
+    if not packages:
+        print("No Unity packages found.")
+        return
+
+    print(f"\nUnity packages in {unity_root}:\n")
+    col_name = max(len(p.name) for p in packages)
+
+    for pkg_dir in packages:
+        try:
+            meta = json.loads((pkg_dir / "package.json").read_text())
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+
+        name = pkg_dir.name.ljust(col_name)
+        version = meta.get("version", "?")
+        pkg_id = meta.get("name", "")
+        display = meta.get("displayName", "")
+
+        print(f"  {name}  v{version}  {pkg_id}  ({display})")
+
+    print()
