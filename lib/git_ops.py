@@ -2,13 +2,14 @@
 Git operations — wraps all mutating commands in a safe pull→work→commit→push flow.
 
 Flow:
-  1. git pull --rebase (fail fast if remote has diverged)
-  2. git stash (save any pre-existing dirty state)
-  3. yield (caller does its work)
-  4. git add -A
-  5. git commit -m <message>   (called explicitly by the caller)
-  6. git push
-  7. git stash pop             (restore pre-existing dirty state)
+  1. Check for uncommitted/unstaged files → ask to commit first (if any)
+  2. git pull --rebase (fail fast if remote has diverged)
+  3. git stash (save any pre-existing dirty state)
+  4. yield (caller does its work)
+  5. git add -A
+  6. git commit -m <message>   (called explicitly by the caller)
+  7. git push
+  8. git stash pop             (restore pre-existing dirty state)
 
 If anything fails after the work phase the context manager attempts to restore
 the repo to the pre-operation state (stash pop + reset).
@@ -83,8 +84,11 @@ class GitContext:
         if not self.enabled:
             return self
         if self.dry_run:
-            print("[dry-run] Would: git pull --rebase")
+            print("[dry-run] Would: check for uncommitted changes, then git pull --rebase")
             return self
+
+        # Handle uncommitted/unstaged changes before pulling
+        self._check_and_handle_dirty_state()
 
         self._pull()
         self._stash_save()
@@ -112,6 +116,45 @@ class GitContext:
         return False
 
     # ── private helpers ───────────────────────────────────────────────────────
+
+    def _check_and_handle_dirty_state(self) -> None:
+        """Detect uncommitted/unstaged files and optionally commit them before pull."""
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self.root, capture_output=True, text=True,
+        )
+        dirty = result.stdout.strip()
+        if not dirty:
+            return
+
+        print("\nUncommitted or unstaged changes detected:")
+        # Show a friendly list of changed files
+        for line in dirty.splitlines():
+            status = line[:2]
+            file = line[3:]
+            print(f"  {status} {file}")
+
+        print()
+        answer = input("Do you want to commit these changes before pulling? (y/n): ").strip().lower()
+        if answer != 'y':
+            print("Aborting operation. Please commit or stash your changes manually.", file=sys.stderr)
+            sys.exit(1)
+
+        # Ask for a commit message
+        msg = input("Enter commit message (or press Enter for 'Pre-pull commit'): ").strip()
+        if not msg:
+            msg = "Pre-pull commit"
+
+        print(f"  git add -A")
+        _run(["git", "add", "-A"], cwd=self.root)
+        print(f"  git commit -m '{msg}'")
+        try:
+            _run(["git", "commit", "-m", msg], cwd=self.root)
+        except GitError as e:
+            print(f"ERROR: Failed to commit changes: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        print("Committed successfully. Continuing with pull.\n")
 
     def _pull(self) -> None:
         print(f"  git pull --rebase {self.remote} {self.branch}")
