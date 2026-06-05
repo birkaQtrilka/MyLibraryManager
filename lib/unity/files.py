@@ -53,6 +53,9 @@ def remove_files(names: list[str], search_dir: Path, dry_run: bool = False) -> N
     """
     Remove named files from search_dir. `names` may be bare filenames or
     relative paths within search_dir.
+    
+    Also deletes the corresponding Unity .meta file (if present) for each
+    removed file or directory.
     """
     for name in names:
         target = (search_dir / name).resolve()
@@ -68,13 +71,24 @@ def remove_files(names: list[str], search_dir: Path, dry_run: bool = False) -> N
             print(f"  WARNING: file not found, skipping: {target}", file=sys.stderr)
             continue
 
+        # Construct the associated .meta file path
+        meta_path = target.parent / (target.name + ".meta")
+
         if dry_run:
             print(f"  [dry-run] remove {target}")
+            if meta_path.exists():
+                print(f"  [dry-run] remove {meta_path}")
             continue
 
+        # Remove the main file/directory
         if target.is_file():
             target.unlink()
             print(f"  remove {target}")
         elif target.is_dir():
             shutil.rmtree(target)
             print(f"  remove dir {target}")
+
+        # Remove the .meta file if it exists
+        if meta_path.exists():
+            meta_path.unlink()
+            print(f"  remove {meta_path}")

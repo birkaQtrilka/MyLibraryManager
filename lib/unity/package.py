@@ -106,6 +106,7 @@ def cmd_unity_delete(
 ) -> None:
     unity_root = cfg.unity_root
     pkg_dir = _require_package_exists(unity_root, name)
+    meta_path = pkg_dir.with_suffix(pkg_dir.suffix + ".meta")  # e.g., "MyPackage.meta"
 
     print(f"\nDeleting Unity package '{name}' at {pkg_dir}")
     confirm = input(f"Are you sure? {'[dry-run]' if dry_run else 'This cannot be undone'}. [Y/N] ").strip().lower()
@@ -115,9 +116,14 @@ def cmd_unity_delete(
 
     if dry_run:
         print(f"  [dry-run] remove {pkg_dir}")
+        if meta_path.exists():
+            print(f"  [dry-run] remove {meta_path}")
     else:
         shutil.rmtree(pkg_dir)
         print(f"  Removed {pkg_dir}")
+        if meta_path.exists():
+            meta_path.unlink()
+            print(f"  Removed {meta_path}")
 
     print("Done.\n")
 
