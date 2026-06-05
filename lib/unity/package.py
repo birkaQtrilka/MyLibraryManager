@@ -107,7 +107,7 @@ def cmd_unity_delete(
     pkg_dir = _require_package_exists(unity_root, name)
 
     print(f"\nDeleting Unity package '{name}' at {pkg_dir}")
-    confirm = input("Are you sure? This cannot be undone. [y/N] ").strip().lower()
+    confirm = input(f"Are you sure? {'[dry-run]' if dry_run else 'This cannot be undone'}. [Y/N] ").strip().lower()
     if confirm != "y":
         print("Aborted.")
         sys.exit(0)
@@ -123,32 +123,59 @@ def cmd_unity_delete(
 
 # ── add-files ─────────────────────────────────────────────────────────────────
 
-def cmd_unity_add_files(
-    cfg: Config,
-    git: GitContext,
-    name: str,
-    runtime_sources: list[str],
-    editor_sources: list[str],
-    dry_run: bool,
-) -> None:
-    unity_root = cfg.unity_root
-    pkg_dir = _require_package_exists(unity_root, name)
+def ensure_namespace_in_file(file_path: Path, namespace: str) -> bool:
+    """Add namespace wrapper to a C# file if it doesn't have one."""
+    if not file_path.suffix == '.cs':
+        return False
+    
+    content = file_path.read_text(encoding='utf-8')
+    
+    # Check if already has a namespace
+    if 'namespace ' in content:
+        return False
+    
+    # Extract class name
+    class_match = re.search(r'public\s+class\s+(\w+)', content)
+    if not class_match:
+        return False
+    
+    class_name = class_match.group(1)
+    
+    # Wrap content in namespace
+    wrapped = f"""namespace {namespace} {{
+{content}
+}}"""
+    
+    file_path.write_text(wrapped, encoding='utf-8')
+    return True
 
-    print(f"\nAdding files to Unity package '{name}'")
-
-    if runtime_sources:
-        print(f"  Copying runtime files:")
-        copy_sources(runtime_sources, pkg_dir / "Runtime", dry_run)
-
-    if editor_sources:
-        print(f"  Copying editor files:")
-        copy_sources(editor_sources, pkg_dir / "Editor", dry_run)
-
-    if not runtime_sources and not editor_sources:
-        print("  Nothing to do — no files specified.")
-        sys.exit(0)
-
-    print("Done.\n")
+def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry_run):
+    """Add files to package with namespace enforcement."""
+    package_path = cfg.unity_root / package_name
+    
+    # Determine namespace from package prefix
+    namespace = f"{cfg.assembly_prefix}.{package_name}"
+    
+    for file_path in runtime_files:
+        src = Path(file_path)
+        dest = package_path / "Runtime" / src.name
+        if dry_run:
+            print(f"[dry-run] Would copy {src} -> {dest}")
+        else:
+            shutil.copy2(src, dest)
+            # Ensure C# files have namespace
+            ensure_namespace_in_file(dest, namespace)
+            print(f"  Added {dest} (namespaced as {namespace})")
+    
+    for file_path in editor_files:
+        src = Path(file_path)
+        dest = package_path / "Editor" / src.name
+        if dry_run:
+            print(f"[dry-run] Would copy {src} -> {dest}")
+        else:
+            shutil.copy2(src, dest)
+            ensure_namespace_in_file(dest, namespace)
+            print(f"  Added {dest} (namespaced as {namespace})")
 
 
 # ── remove-files ──────────────────────────────────────────────────────────────
