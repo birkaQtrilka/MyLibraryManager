@@ -8,6 +8,7 @@ is responsible for calling git.commit() with an appropriate message.
 import json
 import shutil
 import sys
+import re
 from pathlib import Path
 
 from lib.config import Config
@@ -16,7 +17,7 @@ from lib.unity.names import derive_names, make_package_json, make_runtime_asmdef
 from lib.unity.files import copy_sources, remove_files
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# helpers
 
 def _require_package_exists(unity_root: Path, name: str) -> Path:
     pkg_dir = unity_root / name
@@ -43,7 +44,7 @@ def _write(path: Path, content: str, dry_run: bool) -> None:
     print(f"  write {path}")
 
 
-# ── create ────────────────────────────────────────────────────────────────────
+# create 
 
 def cmd_unity_create(
     cfg: Config,
@@ -95,7 +96,7 @@ def cmd_unity_create(
     print(f"Done. Package at: {pkg_dir}\n")
 
 
-# ── delete ────────────────────────────────────────────────────────────────────
+# delete
 
 def cmd_unity_delete(
     cfg: Config,
@@ -121,7 +122,7 @@ def cmd_unity_delete(
     print("Done.\n")
 
 
-# ── add-files ─────────────────────────────────────────────────────────────────
+# add-files
 
 def ensure_namespace_in_file(file_path: Path, namespace: str) -> bool:
     """Add namespace wrapper to a C# file if it doesn't have one."""
@@ -178,7 +179,7 @@ def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry
             print(f"  Added {dest} (namespaced as {namespace})")
 
 
-# ── remove-files ──────────────────────────────────────────────────────────────
+# remove-files
 
 def cmd_unity_remove_files(
     cfg: Config,
@@ -208,7 +209,7 @@ def cmd_unity_remove_files(
     print("Done.\n")
 
 
-# ── list ──────────────────────────────────────────────────────────────────────
+# list
 
 def cmd_unity_list(cfg: Config) -> None:
     unity_root = cfg.unity_root

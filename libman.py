@@ -25,43 +25,77 @@ from lib.unity.package import (
 )
 
 
+# ---------- Custom formatter to show nested subcommands ----------
+class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """Shows subcommands of subcommands in the main help output."""
+    def _format_action(self, action):
+        # For a subparsers action, we walk through its subparsers and
+        # recursively show their subcommands as well.
+        if isinstance(action, argparse._SubParsersAction):
+            parts = []
+            # Header line (e.g., "positional arguments:")
+            parts.append(self._format_action_invocation(action))
+            parts.append('')
+            # Get the dict of subparsers: name -> ArgumentParser
+            subparsers = action._name_parser_map
+            for name, subparser in sorted(subparsers.items()):
+                # Show subcommand name and its short help
+                help_line = f"  {name:<15} {subparser.description or ''}"
+                parts.append(help_line)
+                # If this subparser itself has subparsers, repeat the process
+                sub_actions = [a for a in subparser._actions if isinstance(a, argparse._SubParsersAction)]
+                if sub_actions:
+                    for sub_action in sub_actions:
+                        sub_subparsers = sub_action._name_parser_map
+                        for sub_name, sub_subparser in sorted(sub_subparsers.items()):
+                            sub_help = f"    {sub_name:<13} {sub_subparser.description or ''}"
+                            parts.append(sub_help)
+                parts.append('')
+            return '\n'.join(parts)
+        return super()._format_action(action)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="libman",
         description="Monorepo package manager",
+        formatter_class=RecursiveHelpFormatter,
+        epilog="""
+Examples:
+  libman focus /path/to/repo
+  libman init
+  libman unity create MyPackage --runtime src/ --editor editor/
+  libman unity list
+  libman unity add-files MyPackage --runtime newfile.cs
+  libman unity remove-files MyPackage --runtime oldfile.cs
+  libman unity delete MyPackage
+        """
     )
     parser.add_argument(
-        "--repo",
-        default=None,
-        help="Path to the target library repository (overrides focused library)",
+        "--repo", default=None,
+        help="Path to the target library repository (overrides focused library)"
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-git", action="store_true")
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # ── focus ────────────────────────────────────────────────────────────────
+    # focus
     focus_p = sub.add_parser("focus", help="Remember a library path so you don't have to use --repo")
     focus_p.add_argument("path", help="Absolute or relative path to the library repository")
 
-    # ── init ─────────────────────────────────────────────────────────────────
+    # init
     sub.add_parser("init", help="Create a .libmanrc config file in the repo root")
 
-    # ── unity ─────────────────────────────────────────────────────────────────
+    # unity
     unity_p = sub.add_parser("unity", help="Manage Unity packages")
     unity_sub = unity_p.add_subparsers(dest="unity_command", required=True)
 
     # unity create
     create_p = unity_sub.add_parser("create", help="Create a new Unity package")
     create_p.add_argument("name", help="PascalCase package name, e.g. Utils")
-    create_p.add_argument(
-        "--runtime", nargs="*", default=[], metavar="PATH",
-        help="Files/folders to copy into Runtime/",
-    )
-    create_p.add_argument(
-        "--editor", nargs="*", default=[], metavar="PATH",
-        help="Files/folders to copy into Editor/",
-    )
+    create_p.add_argument("--runtime", nargs="*", default=[], metavar="PATH")
+    create_p.add_argument("--editor", nargs="*", default=[], metavar="PATH")
 
     # unity delete
     delete_p = unity_sub.add_parser("delete", help="Delete a Unity package")
@@ -86,23 +120,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
+
 def resolve_repo_path(args) -> str:
-    """Determine which repo path to use based on arguments, cwd, or focus."""
-    # 1. Did the user explicitly pass --repo?
     if args.repo:
         return args.repo
-
-    # 2. Is the current working directory a library? (Has .libmanrc or .git)
     cwd = Path.cwd()
     if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
         return str(cwd)
-
-    # 3. Fallback to the globally focused library
     focused = get_focused_library()
     if focused and Path(focused).exists():
         return focused
-
-    # 4. Give up and instruct the user
     print("ERROR: Could not determine which library to manage.", file=sys.stderr)
     print("Please do one of the following:", file=sys.stderr)
     print("  a) 'cd' into your library's directory", file=sys.stderr)
@@ -110,48 +137,44 @@ def resolve_repo_path(args) -> str:
     print("  c) Append '--repo /path/to/my/lib' to your command", file=sys.stderr)
     sys.exit(1)
 
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    # Handle 'focus' command immediately (no config needed yet)
+    # focus is independent, doesn't need a repo
     if args.command == "focus":
         set_focused_library(args.path)
         return
 
-    # Figure out the repo path to operate on
+    # Now resolve repo path – needed for init and unity commands
     repo_path = resolve_repo_path(args)
 
-    # ── init (no git context needed) ─────────────────────────────────────────
     if args.command == "init":
         load_or_create_config(repo_path, force_create=True)
         return
 
     cfg = load_or_create_config(repo_path)
-    dry_run: bool = args.dry_run
-    use_git: bool = not args.no_git
+    dry_run = args.dry_run
+    use_git = not args.no_git
 
-    # ── unity list (read-only, no git needed) ────────────────────────────────
+    # unity list is read‑only
     if args.command == "unity" and args.unity_command == "list":
         cmd_unity_list(cfg)
         return
 
-    # ── all mutating commands go through GitContext ───────────────────────────
+    # All mutating commands use GitContext
     with GitContext(cfg, dry_run=dry_run, enabled=use_git) as git:
-
         if args.command == "unity":
             if args.unity_command == "create":
                 cmd_unity_create(cfg, git, args.name, args.runtime, args.editor, dry_run)
                 git.commit(f"feat(unity): add {args.name} package")
-
             elif args.unity_command == "delete":
                 cmd_unity_delete(cfg, git, args.name, dry_run)
                 git.commit(f"chore(unity): remove {args.name} package")
-
             elif args.unity_command == "add-files":
                 cmd_unity_add_files(cfg, git, args.name, args.runtime, args.editor, dry_run)
                 git.commit(f"feat(unity/{args.name}): add files")
-
             elif args.unity_command == "remove-files":
                 cmd_unity_remove_files(cfg, git, args.name, args.runtime, args.editor, dry_run)
                 git.commit(f"chore(unity/{args.name}): remove files")
