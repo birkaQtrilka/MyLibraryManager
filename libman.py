@@ -28,6 +28,7 @@ from lib.unity.package import (
 )
 import argcomplete
 from argcomplete.completers import FilesCompleter
+import subprocess
 
 # ---------- Custom formatter to show nested subcommands ----------
 class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -57,6 +58,54 @@ class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
                 parts.append('')
             return '\n'.join(parts)
         return super()._format_action(action)
+
+def setup_powershell_autocomplete():
+    """Automatically adds argcomplete to the user's PowerShell profile."""
+    
+    # The exact command you want to inject
+    auto_cmd = "register-python-argcomplete --shell powershell libman | Out-String | Invoke-Expression"
+    
+    try:
+        # Determine whether to use 'pwsh' (PowerShell Core 7+) or 'powershell' (Windows PowerShell 5.1)
+        # Use pwsh if available, fallback to powershell
+        shell_exe = "powershell"
+        try:
+            if subprocess.run(["pwsh", "-Version"], capture_output=True).returncode == 0:
+                shell_exe = "pwsh"
+        except FileNotFoundError:
+            pass
+
+        # Ask PowerShell for the path to the current user's profile
+        result = subprocess.run(
+            [shell_exe, "-NoProfile", "-Command", "Write-Output $PROFILE"],
+            capture_output=True, text=True, check=True
+        )
+        
+        profile_path = Path(result.stdout.strip())
+        
+        # Ensure the directory and file exist
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        if not profile_path.exists():
+            profile_path.touch()
+            
+        # Read profile to check if it's already installed
+        content = profile_path.read_text(encoding="utf-8")
+        
+        if auto_cmd in content:
+            print("✓ Autocomplete is already configured in your PowerShell profile.")
+            return
+
+        # Append to the profile
+        with profile_path.open("a", encoding="utf-8") as f:
+            f.write("\n# libman autocomplete\n")
+            f.write(f"{auto_cmd}\n")
+            
+        print(f"✓ Added autocomplete to PowerShell profile: {profile_path}")
+        print("! Please restart PowerShell or run '. $PROFILE' to apply changes.")
+
+    except Exception as e:
+        print(f"⚠ Failed to setup autocomplete automatically: {e}")
+        print(f"Please manually add this line to your PowerShell profile:\n{auto_cmd}")
 
 def package_name_completer(prefix, parsed_args, **kwargs):
     """Complete Unity package names from existing packages"""
@@ -214,6 +263,7 @@ def main():
 
     if args.command == "init":
         load_or_create_config(repo_path, force_create=True)
+        setup_powershell_autocomplete()
         return
 
     cfg = load_or_create_config(repo_path)
