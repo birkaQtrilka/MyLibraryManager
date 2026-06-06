@@ -44,7 +44,7 @@ def _write(path: Path, content: str, dry_run: bool) -> None:
     print(f"  write {path}")
 
 
-# create 
+# create
 
 def cmd_unity_create(
     cfg: Config,

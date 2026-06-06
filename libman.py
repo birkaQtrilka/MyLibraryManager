@@ -12,12 +12,14 @@ Usage:
     python libman.py unity remove-files <Name> --runtime <files>... --editor <files>...
     python libman.py unity list
 """
-import json
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional
+from lib.autocomplete import package_name_completer, setup_powershell_autocomplete
 from lib.config import load_or_create_config, set_focused_library, get_focused_library
 from lib.git_ops import GitContext
+from lib.recursive_help_formatter import RecursiveHelpFormatter
 from lib.unity.package import (
     cmd_unity_create,
     cmd_unity_delete,
@@ -28,129 +30,6 @@ from lib.unity.package import (
 )
 import argcomplete
 from argcomplete.completers import FilesCompleter
-import subprocess
-
-# ---------- Custom formatter to show nested subcommands ----------
-class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """Shows subcommands of subcommands in the main help output."""
-    def _format_action(self, action):
-        # For a subparsers action, we walk through its subparsers and
-        # recursively show their subcommands as well.
-        if isinstance(action, argparse._SubParsersAction):
-            parts = []
-            # Header line (e.g., "positional arguments:")
-            parts.append(self._format_action_invocation(action))
-            parts.append('')
-            # Get the dict of subparsers: name -> ArgumentParser
-            subparsers = action._name_parser_map
-            for name, subparser in sorted(subparsers.items()):
-                # Show subcommand name and its short help
-                help_line = f"  {name:<15} {subparser.description or ''}"
-                parts.append(help_line)
-                # If this subparser itself has subparsers, repeat the process
-                sub_actions = [a for a in subparser._actions if isinstance(a, argparse._SubParsersAction)]
-                if sub_actions:
-                    for sub_action in sub_actions:
-                        sub_subparsers = sub_action._name_parser_map
-                        for sub_name, sub_subparser in sorted(sub_subparsers.items()):
-                            sub_help = f"    {sub_name:<13} {sub_subparser.description or ''}"
-                            parts.append(sub_help)
-                parts.append('')
-            return '\n'.join(parts)
-        return super()._format_action(action)
-
-def setup_powershell_autocomplete():
-    """Automatically adds argcomplete to the user's PowerShell profile."""
-    
-    # The exact command you want to inject
-    auto_cmd = "register-python-argcomplete --shell powershell libman | Out-String | Invoke-Expression"
-    
-    try:
-        # Determine whether to use 'pwsh' (PowerShell Core 7+) or 'powershell' (Windows PowerShell 5.1)
-        # Use pwsh if available, fallback to powershell
-        shell_exe = "powershell"
-        try:
-            if subprocess.run(["pwsh", "-Version"], capture_output=True).returncode == 0:
-                shell_exe = "pwsh"
-        except FileNotFoundError:
-            pass
-
-        # Ask PowerShell for the path to the current user's profile
-        result = subprocess.run(
-            [shell_exe, "-NoProfile", "-Command", "Write-Output $PROFILE"],
-            capture_output=True, text=True, check=True
-        )
-        
-        profile_path = Path(result.stdout.strip())
-        
-        # Ensure the directory and file exist
-        profile_path.parent.mkdir(parents=True, exist_ok=True)
-        if not profile_path.exists():
-            profile_path.touch()
-            
-        # Read profile to check if it's already installed
-        content = profile_path.read_text(encoding="utf-8")
-        
-        if auto_cmd in content:
-            print("✓ Autocomplete is already configured in your PowerShell profile.")
-            return
-
-        # Append to the profile
-        with profile_path.open("a", encoding="utf-8") as f:
-            f.write("\n# libman autocomplete\n")
-            f.write(f"{auto_cmd}\n")
-            
-        print(f"✓ Added autocomplete to PowerShell profile: {profile_path}")
-        print("! Please restart PowerShell or run '. $PROFILE' to apply changes.")
-
-    except Exception as e:
-        print(f"⚠ Failed to setup autocomplete automatically: {e}")
-        print(f"Please manually add this line to your PowerShell profile:\n{auto_cmd}")
-
-def package_name_completer(prefix, parsed_args, **kwargs):
-    """Complete Unity package names from existing packages"""
-    try:
-        repo_path = None
-        
-        # 1. Explicit --repo flag (matches resolve_repo_path priority)
-        if hasattr(parsed_args, 'repo') and parsed_args.repo:
-            repo_path = parsed_args.repo
-        else:
-            # 2. CWD
-            cwd = Path.cwd()
-            if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
-                repo_path = str(cwd)
-            # 3. Globally focused library
-            else:
-                repo_path = get_focused_library()
-
-        if not repo_path or not Path(repo_path).exists():
-            return []
-
-        config_path = Path(repo_path) / ".libmanrc"
-        
-        unity_dir_name = "Unity"  # Default
-
-        if config_path.exists():
-            try:
-                data = json.loads(config_path.read_text(encoding="utf-8"))
-                # Check potential config keys
-                if "unity_root" in data:
-                    unity_dir_name = data["unity_root"]
-                elif "unity_folder" in data:
-                    unity_dir_name = data["unity_folder"]
-            except Exception:
-                pass
-
-        packages_dir = Path(repo_path) / unity_dir_name
-
-        if packages_dir.exists():
-            return [p.name for p in packages_dir.iterdir()
-                    if p.is_dir() and p.name.startswith(prefix)]
-    except Exception:
-        pass
-
-    return []
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -182,6 +61,10 @@ Examples:
     # focus
     focus_p = sub.add_parser("focus", help="Remember a library path so you don't have to use --repo")
     focus_p.add_argument("path", help="Absolute or relative path to the library repository")
+
+    # visit
+    # visit_p = sub.add_parser("visit", help="Go to the focused library")
+    # visit_p.add_argument("--copy", help="Copies to clipboard instead of visiting there")
 
     # init
     sub.add_parser("init", help="Create a .libmanrc config file in the repo root")
@@ -231,23 +114,20 @@ Examples:
 
     return parser
 
-def resolve_repo_path(args) -> str:
-    if args.repo:
-        return args.repo
-    cwd = Path.cwd()
-    if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
-        return str(cwd)
-    focused = get_focused_library()
-    if focused and Path(focused).exists():
-        return focused
-    print("ERROR: Could not determine which library to manage.", file=sys.stderr)
-    print("Please do one of the following:", file=sys.stderr)
-    print("  a) 'cd' into your library's directory", file=sys.stderr)
-    print("  b) Run 'libman focus /path/to/my/lib' once", file=sys.stderr)
-    print("  c) Append '--repo /path/to/my/lib' to your command", file=sys.stderr)
-    sys.exit(1)
 
-
+def get_library(parsed_args) -> Optional[str]:
+    # 1. Explicit --repo flag (matches resolve_repo_path priority)
+        if hasattr(parsed_args, 'repo') and parsed_args.repo:
+            return parsed_args.repo
+        else:
+            # 2. CWD
+            cwd = Path.cwd()
+            if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
+                return str(cwd)
+            # 3. Globally focused library
+            else:
+                return get_focused_library()
+            
 def main():
     parser = build_parser()
     argcomplete.autocomplete(parser, exclude=['-h', '--help'])
@@ -259,12 +139,23 @@ def main():
         return
 
     # Now resolve repo path – needed for init and unity commands
-    repo_path = resolve_repo_path(args)
+    repo_path = get_library(args)
+
+    if(not repo_path):
+        print("ERROR: Could not determine which library to manage.", file=sys.stderr)
+        print("Please do one of the following:", file=sys.stderr)
+        print("  a) 'cd' into your library's directory", file=sys.stderr)
+        print("  b) Run 'libman focus /path/to/my/lib' once", file=sys.stderr)
+        print("  c) Append '--repo /path/to/my/lib' to your command", file=sys.stderr)
+        sys.exit(1)
+        return
 
     if args.command == "init":
         load_or_create_config(repo_path, force_create=True)
         setup_powershell_autocomplete()
         return
+
+    # if(args.)
 
     cfg = load_or_create_config(repo_path)
     dry_run = args.dry_run
