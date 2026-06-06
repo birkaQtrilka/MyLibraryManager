@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
+
 """
 libman.py — monorepo package manager for Unity packages.
 
@@ -10,7 +12,7 @@ Usage:
     python libman.py unity remove-files <Name> --runtime <files>... --editor <files>...
     python libman.py unity list
 """
-
+import json
 import argparse
 import sys
 from pathlib import Path
@@ -24,7 +26,8 @@ from lib.unity.package import (
     cmd_unity_list,
     cmd_unity_structure,
 )
-
+import argcomplete
+from argcomplete.completers import FilesCompleter
 
 # ---------- Custom formatter to show nested subcommands ----------
 class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -55,6 +58,50 @@ class RecursiveHelpFormatter(argparse.RawDescriptionHelpFormatter):
             return '\n'.join(parts)
         return super()._format_action(action)
 
+def package_name_completer(prefix, parsed_args, **kwargs):
+    """Complete Unity package names from existing packages"""
+    try:
+        repo_path = None
+        
+        # 1. Explicit --repo flag (matches resolve_repo_path priority)
+        if hasattr(parsed_args, 'repo') and parsed_args.repo:
+            repo_path = parsed_args.repo
+        else:
+            # 2. CWD
+            cwd = Path.cwd()
+            if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
+                repo_path = str(cwd)
+            # 3. Globally focused library
+            else:
+                repo_path = get_focused_library()
+
+        if not repo_path or not Path(repo_path).exists():
+            return []
+
+        config_path = Path(repo_path) / ".libmanrc"
+        
+        unity_dir_name = "Unity"  # Default
+
+        if config_path.exists():
+            try:
+                data = json.loads(config_path.read_text(encoding="utf-8"))
+                # Check potential config keys
+                if "unity_root" in data:
+                    unity_dir_name = data["unity_root"]
+                elif "unity_folder" in data:
+                    unity_dir_name = data["unity_folder"]
+            except Exception:
+                pass
+
+        packages_dir = Path(repo_path) / unity_dir_name
+
+        if packages_dir.exists():
+            return [p.name for p in packages_dir.iterdir()
+                    if p.is_dir() and p.name.startswith(prefix)]
+    except Exception:
+        pass
+
+    return []
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -96,38 +143,44 @@ Examples:
 
     # unity create
     create_p = unity_sub.add_parser("create", help="Create a new Unity package")
-    create_p.add_argument("name", help="PascalCase package name, e.g. Utils")
-    create_p.add_argument("--runtime", nargs="*", default=[], metavar="PATH")
-    create_p.add_argument("--editor", nargs="*", default=[], metavar="PATH")
-
-    # unity structure
+    create_p.add_argument("name", help="PascalCase package name, e.g. Utils"
+        ).completer = lambda prefix, **kw: []
+    create_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH"
+        ).completer = FilesCompleter()
+    create_p.add_argument("--editor", nargs="+", default=[], metavar="PATH"
+        ).completer = FilesCompleter()
+    
+    # unity dir
     struct_p = unity_sub.add_parser("dir", help="Display folder (and optionally file) tree structure of a Unity package")
-    struct_p.add_argument("name", help="Package name (folder under unity_root)")
-    struct_p.add_argument("--files", action="store_true", dest="with_files",help="Include individual file names in the tree view")
+    struct_p.add_argument("name", help="Package name (folder under unity_root)").completer = package_name_completer
+    struct_p.add_argument("--files", action="store_true", dest="with_files", help="Include individual file names in the tree view")
 
     # unity delete
     delete_p = unity_sub.add_parser("delete", help="Delete a Unity package")
-    delete_p.add_argument("name", help="Package name to delete")
+    delete_p.add_argument("name", help="Package name to delete").completer = package_name_completer
 
     # unity add-files
     add_p = unity_sub.add_parser("add-files", help="Add files to an existing Unity package")
-    add_p.add_argument("name", help="Package name")
-    add_p.add_argument("--runtime", nargs="*", default=[], metavar="PATH")
-    add_p.add_argument("--editor", nargs="*", default=[], metavar="PATH")
+    add_p.add_argument("name", help="Package name").completer = package_name_completer
+    add_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH"
+        ).completer = FilesCompleter()
+    add_p.add_argument("--editor", nargs="+", default=[], metavar="PATH"
+        ).completer = FilesCompleter()
 
     # unity remove-files
     rm_p = unity_sub.add_parser("remove-files", help="Remove files from a Unity package")
-    rm_p.add_argument("name", help="Package name")
-    rm_p.add_argument("--runtime", nargs="*", default=[], metavar="PATH",
-                      help="File names (relative to Runtime/) to remove")
-    rm_p.add_argument("--editor", nargs="*", default=[], metavar="PATH",
-                      help="File names (relative to Editor/) to remove")
+    rm_p.add_argument("name", help="Package name").completer = package_name_completer
+    rm_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH",
+                      help="File names (relative to Runtime/) to remove"
+        ).completer = FilesCompleter()
+    rm_p.add_argument("--editor", nargs="+", default=[], metavar="PATH",
+                      help="File names (relative to Editor/) to remove"
+        ).completer = FilesCompleter()
 
     # unity list
     unity_sub.add_parser("list", help="List all Unity packages")
 
     return parser
-
 
 def resolve_repo_path(args) -> str:
     if args.repo:
@@ -148,6 +201,7 @@ def resolve_repo_path(args) -> str:
 
 def main():
     parser = build_parser()
+    argcomplete.autocomplete(parser, exclude=['-h', '--help'])
     args = parser.parse_args()
 
     # focus is independent, doesn't need a repo
