@@ -14,6 +14,7 @@ Usage:
 """
 import argparse
 import sys
+import pyperclip
 from pathlib import Path
 from typing import Optional
 from lib.autocomplete import package_name_completer, setup_powershell_autocomplete
@@ -63,8 +64,8 @@ Examples:
     focus_p.add_argument("path", help="Absolute or relative path to the library repository")
 
     # visit
-    # visit_p = sub.add_parser("visit", help="Go to the focused library")
-    # visit_p.add_argument("--copy", help="Copies to clipboard instead of visiting there")
+    visit_p = sub.add_parser("visit", help="Go to the focused library")
+    visit_p.add_argument("--copy", action="store_true", help="Copies to clipboard instead of visiting there")
 
     # init
     sub.add_parser("init", help="Create a .libmanrc config file in the repo root")
@@ -127,10 +128,20 @@ def get_library(parsed_args) -> Optional[str]:
             # 3. Globally focused library
             else:
                 return get_focused_library()
-            
+
+def do_visit(args):
+    if args.copy:
+      pyperclip.copy(get_library(args))
+      print(f"copied {get_library(args)} to clipboard")
+      return
+    if args.dry_run:
+      print(f"should cd to {get_library(args)}" )
+    else:
+        print(get_library(args)) # code in $PROFILE to handle this command specifically
+
 def main():
     parser = build_parser()
-    argcomplete.autocomplete(parser, exclude=['-h', '--help'])
+    argcomplete.autocomplete(parser, exclude=['-h', '--help']) # code in $PROFILE to initialize autocomplete for each terminal session
     args = parser.parse_args()
 
     # focus is independent, doesn't need a repo
@@ -155,12 +166,13 @@ def main():
         setup_powershell_autocomplete()
         return
 
-    # if(args.)
-
     cfg = load_or_create_config(repo_path)
     dry_run = args.dry_run
     use_git = not args.no_git
-
+    if(args.command == "visit"):
+        do_visit(args)
+        return
+    
     # unity list is read‑only
     if args.command == "unity":
         if args.unity_command == "list":
