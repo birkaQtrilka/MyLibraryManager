@@ -11,4 +11,4 @@
 - test all features for non unity commands
 - ability to handle merge conflicts
 - ability to copy files/open files, so I can modify them quickly
-- go to library
+

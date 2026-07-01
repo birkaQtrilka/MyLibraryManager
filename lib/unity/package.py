@@ -10,6 +10,7 @@ import shutil
 import sys
 import re
 from pathlib import Path
+import subprocess
 
 from lib.config import Config
 from lib.git_ops import GitContext
@@ -313,3 +314,41 @@ def cmd_unity_structure(
     
     _print_tree(pkg_dir)
     print()
+
+def find_unity_project_directory(cfg) -> str:
+  current_dir = Path(cfg.unity_root).resolve()
+  project_path = None
+    
+  PARENT_CAP = 10
+  i = 0
+  while current_dir != current_dir.parent and i < PARENT_CAP:
+      if current_dir.name == "Assets":
+          project_path = current_dir.parent
+          break
+      i+=1
+      current_dir = current_dir.parent
+  return project_path
+  
+
+# Start unity
+def cmd_run_unity(cfg):
+    
+    project_path = find_unity_project_directory(cfg)
+    
+    if project_path is None:
+      print(f"Error: Could not find 'Assets' in the path hierarchy of {cfg.unity_root}", file=sys.stderr)
+      return
+
+    print(f"Found Unity Project Root: {project_path}")
+
+    cmd = [
+        str(cfg.unity_exe_path),
+        "-projectPath", str(project_path)
+    ]
+    
+    print(f"Starting Unity from {cfg.unity_exe_path}...")
+    
+    try:
+        subprocess.Popen(cmd)
+    except FileNotFoundError:
+        print(f"Error: Unity executable not found at {cfg.unity_exe_path}")

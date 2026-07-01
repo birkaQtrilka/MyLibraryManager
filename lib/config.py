@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "unity_folder": "Unity",
     "remote": "origin",
     "branch": "main",
+    "unity_exe_path": "C:/Program Files/Unity/Hub/Editor/6000.4.7f1/Editor/Unity.exe"
 }
 
 GLOBAL_CONFIG_PATH = Path.home() / ".libman_global.json"
@@ -58,6 +59,7 @@ def get_focused_library() -> Optional[str]:
     return None
 
 
+
 class Config:
     def __init__(self, data: dict[str, Any], root: Path):
         self._data = data
@@ -77,7 +79,7 @@ class Config:
         return self.root / self._data["unity_folder"]
 
 
-def load_or_create_config(repo_path: str, force_create: bool = False) -> Config:
+def load_config(repo_path: str) -> Config:
     root = Path(repo_path).resolve()
     
     if not (root / ".git").is_dir():
@@ -85,26 +87,6 @@ def load_or_create_config(repo_path: str, force_create: bool = False) -> Config:
         sys.exit(1)
 
     config_path = root / CONFIG_FILENAME
-
-    if force_create or not config_path.exists():
-        if config_path.exists() and force_create:
-            print(f"Config already exists at {config_path}. Overwrite? [y/N] ", end="")
-            if input().strip().lower() != "y":
-                print("Aborted.")
-                sys.exit(0)
-
-        print(f"Creating {CONFIG_FILENAME} at {root}")
-        print("Press Enter to accept defaults shown in [brackets].\n")
-
-        data: dict[str, Any] = {}
-        for key, default in DEFAULTS.items():
-            prompt = f"  {key} [{default}]: " if default else f"  {key}: "
-            val = input(prompt).strip()
-            data[key] = val if val else default
-
-        config_path.write_text(json.dumps(data, indent=4) + "\n")
-        print(f"\nSaved to {config_path}\n")
-        return Config(data, root)
 
     try:
         data = json.loads(config_path.read_text())
@@ -122,3 +104,48 @@ def load_or_create_config(repo_path: str, force_create: bool = False) -> Config:
         config_path.write_text(json.dumps(data, indent=4) + "\n")
 
     return Config(data, root)
+
+def config_exists(repo_path: str) -> Config:
+    root = Path(repo_path).resolve()
+    config_path = root / CONFIG_FILENAME
+    return config_path.exists()
+
+def create_config(repo_path: str) -> Config:
+    root = Path(repo_path).resolve()
+    config_path = root / CONFIG_FILENAME
+        
+    if config_path.exists() :
+        print(f"Config already exists at {config_path}. Overwrite? [y/N] ", end="")
+        if input().strip().lower() != "y":
+            print("Aborted.")
+            sys.exit(0)
+    print(f"Creating {CONFIG_FILENAME} at {root}")
+    print("Press Enter to accept defaults shown in [brackets]. or 'q' to cancel \n")
+
+    try: 
+        data: dict[str, Any] = {}
+        for key, default in DEFAULTS.items():
+            prompt = f"  {key} [{default}]: " if default else f"  {key}: "
+            val = input(prompt).strip()
+            if val == 'q':
+              print(f"Canceled")
+              sys.exit(1)
+            data[key] = val if val else default    
+    except NameError as e:
+        print(f"Canceled: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    config_path.write_text(json.dumps(data, indent=4) + "\n")
+    print(f"\nSaved to {config_path}\n")
+    return Config(data, root)
+
+def get_valid_library(repo_path: str) -> Config:
+    if config_exists(repo_path):
+        return load_config(repo_path)
+    print(f"> There is no config file at path: {repo_path}")
+    print("> You need to run 'libman init' to initialize library")
+    print("\tTrying to get focused library...")
+    repo_path = get_focused_library()
+    if(config_exists(repo_path)): return load_config(repo_path)
+    print("\tERROR: No focused library. run 'libman' focus while in an initialized library to focus", file=sys.stderr)
+    sys.exit(1)

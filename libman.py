@@ -18,10 +18,11 @@ import pyperclip
 from pathlib import Path
 from typing import Optional
 from lib.autocomplete import package_name_completer, setup_powershell_autocomplete
-from lib.config import load_or_create_config, set_focused_library, get_focused_library
+from lib.config import create_config, get_valid_library, load_config, config_exists, set_focused_library, get_focused_library
 from lib.git_ops import GitContext
 from lib.recursive_help_formatter import RecursiveHelpFormatter
 from lib.unity.package import (
+    cmd_run_unity,
     cmd_unity_create,
     cmd_unity_delete,
     cmd_unity_add_files,
@@ -59,6 +60,8 @@ Examples:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
+    # list_p = sub.add_parser("list", "lists all packages in focused library")
+
     # focus
     focus_p = sub.add_parser("focus", help="Remember a library path so you don't have to use --repo")
     focus_p.add_argument("path", help="Absolute or relative path to the library repository")
@@ -83,6 +86,9 @@ Examples:
     create_p.add_argument("--editor", nargs="+", default=[], metavar="PATH"
         ).completer = FilesCompleter()
     
+    # unity start
+    unity_sub.add_parser("start", help="Starts the unity executuble specified in the config file")
+
     # unity dir
     struct_p = unity_sub.add_parser("dir", help="Display folder (and optionally file) tree structure of a Unity package")
     struct_p.add_argument("name", help="Package name (folder under unity_root)").completer = package_name_completer
@@ -121,7 +127,7 @@ def get_library(parsed_args) -> Optional[str]:
         if hasattr(parsed_args, 'repo') and parsed_args.repo:
             return parsed_args.repo
         else:
-            # 2. CWD
+            # 2. Path from terminal location
             cwd = Path.cwd()
             if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
                 return str(cwd)
@@ -129,15 +135,16 @@ def get_library(parsed_args) -> Optional[str]:
             else:
                 return get_focused_library()
 
-def do_visit(args):
+def do_visit(args, cfg):
     if args.copy:
-      pyperclip.copy(get_library(args))
-      print(f"copied {get_library(args)} to clipboard")
+      pyperclip.copy(cfg.root)
+      print(f"copied {cfg.root} to clipboard")
       return
     if args.dry_run:
-      print(f"should cd to {get_library(args)}" )
+      print(f"should cd to {cfg.root}" )
     else:
-        print(get_library(args)) # code in $PROFILE to handle this command specifically
+        print(cfg.root) # code in $PROFILE to handle this command specifically 
+    
 
 def main():
     parser = build_parser()
@@ -151,7 +158,7 @@ def main():
 
     # Now resolve repo path – needed for init and unity commands
     repo_path = get_library(args)
-
+    print(f"repo_path: {repo_path}")
     if(not repo_path):
         print("ERROR: Could not determine which library to manage.", file=sys.stderr)
         print("Please do one of the following:", file=sys.stderr)
@@ -162,15 +169,14 @@ def main():
         return
 
     if args.command == "init":
-        load_or_create_config(repo_path, force_create=True)
+        create_config(repo_path, force_create=True)
         setup_powershell_autocomplete()
         return
-
-    cfg = load_or_create_config(repo_path)
+    cfg = get_valid_library(repo_path)
     dry_run = args.dry_run
     use_git = not args.no_git
     if(args.command == "visit"):
-        do_visit(args)
+        do_visit(args, cfg)
         return
     
     # unity list is read‑only
@@ -180,6 +186,9 @@ def main():
             return
         elif args.unity_command == "dir":
             cmd_unity_structure(cfg, None, args.name, args.with_files, dry_run)
+            return
+        elif args.unity_command == "start":
+            cmd_run_unity(cfg)
             return
 
     # All mutating commands use GitContext
