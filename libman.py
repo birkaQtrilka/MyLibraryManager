@@ -158,7 +158,6 @@ def main():
 
     # Now resolve repo path – needed for init and unity commands
     repo_path = get_library(args)
-    print(f"repo_path: {repo_path}")
     if(not repo_path):
         print("ERROR: Could not determine which library to manage.", file=sys.stderr)
         print("Please do one of the following:", file=sys.stderr)

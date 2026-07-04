@@ -33,8 +33,8 @@ def derive_names(cfg: Config, name: str) -> UnityNames:
 
     pkg_id = f"{prefix_pkg}.unity.{slug}"
     display = f"{first_name}'s {name}"
-    asm_runtime = f"{prefix_asm}.Unity.{name}.Runtime"
-    asm_editor = f"{prefix_asm}.Unity.{name}.Editor"
+    asm_runtime = get_asm_runtime_name(cfg, name)
+    asm_editor = get_asm_editor_name(cfg, name)
 
     return UnityNames(
         name=name,
@@ -49,6 +49,11 @@ def derive_names(cfg: Config, name: str) -> UnityNames:
         asmdef_editor_file=f"{asm_editor}.asmdef",
     )
 
+def get_asm_runtime_name(cfg: Config, name: str) -> str:
+  return f"{cfg.assembly_prefix}.Unity.{name}.Runtime"
+
+def get_asm_editor_name(cfg: Config, name: str) -> str:
+  return f"{cfg.assembly_prefix}.Unity.{name}.Editor"
 
 # ── JSON template builders ────────────────────────────────────────────────────
 

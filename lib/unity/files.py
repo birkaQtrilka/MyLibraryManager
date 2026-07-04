@@ -8,45 +8,73 @@ import sys
 from pathlib import Path
 
 
-def copy_sources(sources: list[str], dest_dir: Path, dry_run: bool = False) -> None:
+import shutil
+import sys
+from pathlib import Path
+from typing import Callable, Optional
+
+OnCopyCallback = Callable[[Path, Path], None]
+
+
+def copy_sources(
+    sources: list[str],
+    dest_dir: Path,
+    dry_run: bool = False,
+    on_copied: Optional[OnCopyCallback] = None,
+) -> None:
     """
     Copy each path in `sources` into `dest_dir`.
-
     - If a source is a file, it is copied flat into dest_dir.
     - If a source is a directory, its contents are merged into dest_dir
       (preserving subdirectory structure).
     - Globs are NOT expanded here; pass resolved paths.
+
+    `on_copied`, if given, is called as `on_copied(src, dest)` after each
+    file is copied (or would be copied, in dry-run mode).
     """
     for src_str in sources:
         src = Path(src_str).resolve()
         if not src.exists():
             print(f"  WARNING: source path does not exist, skipping: {src}", file=sys.stderr)
             continue
-
         if src.is_file():
             dest = dest_dir / src.name
-            _copy_file(src, dest, dry_run)
+            _copy_file(src, dest, dry_run, on_copied)
         elif src.is_dir():
-            _copy_tree(src, dest_dir, dry_run)
+            _copy_tree(src, dest_dir, dry_run, on_copied)
         else:
             print(f"  WARNING: unsupported path type, skipping: {src}", file=sys.stderr)
 
 
-def _copy_file(src: Path, dest: Path, dry_run: bool) -> None:
+def _copy_file(
+    src: Path,
+    dest: Path,
+    dry_run: bool,
+    on_copied: Optional[OnCopyCallback] = None,
+) -> None:
     if dry_run:
         print(f"  [dry-run] copy {src} → {dest}")
+        if on_copied:
+            on_copied(src, dest)
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dest)
     print(f"  copy {src.name} → {dest}")
+    if on_copied:
+        on_copied(src, dest)
 
 
-def _copy_tree(src_dir: Path, dest_dir: Path, dry_run: bool) -> None:
+def _copy_tree(
+    src_dir: Path,
+    dest_dir: Path,
+    dry_run: bool,
+    on_copied: Optional[OnCopyCallback] = None,
+) -> None:
     for item in src_dir.rglob("*"):
         if item.is_file():
             relative = item.relative_to(src_dir)
             dest = dest_dir / relative
-            _copy_file(item, dest, dry_run)
+            _copy_file(item, dest, dry_run, on_copied)
 
 
 def remove_files(names: list[str], search_dir: Path, dry_run: bool = False) -> None:

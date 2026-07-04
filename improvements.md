@@ -1,6 +1,7 @@
 # For the future
 
 ## Handle exceptions
+- add dependencies in assembly definitions while creating unity package
 - handle generation of meta files for unity
 - after deleting a package in cli then going to the unity project will cause creation of empty package folder because of lingering meta data
 - check why it's lagging when no commands can be recommended and only file paths show

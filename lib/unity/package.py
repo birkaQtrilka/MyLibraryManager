@@ -14,7 +14,8 @@ import subprocess
 
 from lib.config import Config
 from lib.git_ops import GitContext
-from lib.unity.names import derive_names, make_package_json, make_runtime_asmdef, make_editor_asmdef
+from lib.unity.file_refactor import ensure_namespace_in_file
+from lib.unity.names import derive_names, get_asm_editor_name, get_asm_runtime_name, make_package_json, make_runtime_asmdef, make_editor_asmdef
 from lib.unity.files import copy_sources, remove_files
 
 
@@ -86,16 +87,23 @@ def cmd_unity_create(
         dry_run,
     )
 
+    namespace_r = get_asm_runtime_name(cfg, name)
+    namespace_e = get_asm_editor_name(cfg, name)
+    
+    def on_file_copy_e(src: Path, dest: Path) -> None:
+      ensure_namespace_in_file(dest, namespace_e)
+    def on_file_copy_r(src: Path, dest: Path) -> None:
+      ensure_namespace_in_file(dest, namespace_r)
+    
     # Copy provided source files
     if runtime_sources:
         print(f"  Copying runtime files:")
-        copy_sources(runtime_sources, runtime_dir, dry_run)
+        copy_sources(runtime_sources, runtime_dir, dry_run, on_copied=on_file_copy_r)
     if editor_sources:
         print(f"  Copying editor files:")
-        copy_sources(editor_sources, editor_dir, dry_run)
+        copy_sources(editor_sources, editor_dir, dry_run, on_copied=on_file_copy_e)
 
     print(f"Done. Package at: {pkg_dir}\n")
-
 
 # delete
 
@@ -131,38 +139,14 @@ def cmd_unity_delete(
 
 # add-files
 
-def ensure_namespace_in_file(file_path: Path, namespace: str) -> bool:
-    """Add namespace wrapper to a C# file if it doesn't have one."""
-    if not file_path.suffix == '.cs':
-        return False
-    
-    content = file_path.read_text(encoding='utf-8')
-    
-    # Check if already has a namespace
-    if 'namespace ' in content:
-        return False
-    
-    # Extract class name
-    class_match = re.search(r'public\s+class\s+(\w+)', content)
-    if not class_match:
-        return False
-    
-    class_name = class_match.group(1)
-    
-    # Wrap content in namespace
-    wrapped = f"""namespace {namespace} {{
-{content}
-}}"""
-    
-    file_path.write_text(wrapped, encoding='utf-8')
-    return True
 
 def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry_run):
     """Add files to package with namespace enforcement."""
     package_path = cfg.unity_root / package_name
     
     # Determine namespace from package prefix
-    namespace = f"{cfg.assembly_prefix}.{package_name}"
+    namespace_r = get_asm_runtime_name(cfg, package_name)
+    namespace_e = get_asm_editor_name(cfg, package_name)
     
     for file_path in runtime_files:
         src = Path(file_path)
@@ -172,8 +156,8 @@ def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry
         else:
             shutil.copy2(src, dest)
             # Ensure C# files have namespace
-            ensure_namespace_in_file(dest, namespace)
-            print(f"  Added {dest} (namespaced as {namespace})")
+            ensure_namespace_in_file(dest, namespace_r)
+            print(f"  Added {dest} (namespaced as {namespace_r})")
     
     for file_path in editor_files:
         src = Path(file_path)
@@ -182,8 +166,8 @@ def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry
             print(f"[dry-run] Would copy {src} -> {dest}")
         else:
             shutil.copy2(src, dest)
-            ensure_namespace_in_file(dest, namespace)
-            print(f"  Added {dest} (namespaced as {namespace})")
+            ensure_namespace_in_file(dest, namespace_e)
+            print(f"  Added {dest} (namespaced as {namespace_e})")
 
 
 # remove-files
