@@ -12,27 +12,26 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=RecursiveHelpFormatter,
         epilog="""
 Examples:
-  libman focus /path/to/repo
-  libman init
-  libman unity create MyPackage --runtime src/ --editor editor/
-  libman unity list
-  libman unity add-files MyPackage --runtime newfile.cs
-  libman unity remove-files MyPackage --runtime oldfile.cs
-  libman unity delete MyPackage
-  libman unity dir MyPackage
-  libman unity dir MyPackage --files
-        """
+
+  > libman focus /path/to/repo
+  > libman unity create MyPackage --runtime Assets/Scripts/MyRuntime.cs --editor Assets/Editor/MyEditor.cs
+  Run 'libman examples' for more examples and common workflows.
+"""
     )
     parser.add_argument(
         "--repo", default=None,
         help="Path to the target library repository (overrides focused library)"
     )
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--no-git", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="goes through each step only describing operations")
+    parser.add_argument("--no-git", action="store_true", help="does not commit changes made to the library")
+    
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # list_p = sub.add_parser("list", "lists all packages in focused library")
+    sub.add_parser(
+        "examples",
+        help="Show common workflows and example commands"
+    )
 
     # focus
     focus_p = sub.add_parser("focus", help="Remember a library path so you don't have to use --repo")

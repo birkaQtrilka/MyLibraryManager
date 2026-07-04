@@ -17,6 +17,7 @@ import sys
 import pyperclip
 from lib.autocomplete import setup_powershell_autocomplete
 from lib.config import create_config, get_library, get_valid_library, set_focused_library, get_focused_library
+from lib.examples import EXAMPLES
 from lib.git_ops import GitContext
 from lib.unity.package import (
     cmd_run_unity,
@@ -75,8 +76,8 @@ def main():
     if(args.command == "visit"):
         do_visit(args, cfg.root)
         return
-    if():
-        
+    if(args.command == "examples"):
+        print(EXAMPLES)
         return
     
     if args.command == "unity":
