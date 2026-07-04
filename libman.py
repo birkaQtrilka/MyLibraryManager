@@ -81,15 +81,18 @@ def main():
         create_config(repo_path, force_create=True)
         setup_powershell_autocomplete()
         return
+    
     cfg = get_valid_library(repo_path)
     dry_run = args.dry_run
     use_git = not args.no_git
-    
+
     if(args.command == "visit"):
         do_visit(args, cfg.root)
         return
+    if():
+        
+        return
     
-    # unity list is read‑only
     if args.command == "unity":
         if args.unity_command == "list":
             cmd_unity_list(cfg)
@@ -119,6 +122,7 @@ def main():
             elif args.unity_command == "remove-files":
                 cmd_unity_remove_files(cfg, git, args.name, args.runtime, args.editor, dry_run)
                 git.commit(f"chore(unity/{args.name}): remove files")
+            
 
 
 if __name__ == "__main__":

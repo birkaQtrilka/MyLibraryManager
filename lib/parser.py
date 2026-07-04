@@ -46,6 +46,9 @@ Examples:
     # init
     sub.add_parser("init", help="Create a .libmanrc config file in the repo root")
 
+    # commit
+    sub.add_parser("commit", help="Manually commits all changes")
+
     # unity
     unity_p = sub.add_parser("unity", help="Manage Unity packages")
     unity_sub = unity_p.add_subparsers(dest="unity_command", required=True)

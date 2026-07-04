@@ -63,7 +63,12 @@ class GitContext:
 
     # ── public API ────────────────────────────────────────────────────────────
 
-    def commit(self, message: str) -> None:
+    def commit(self, message: str = None) -> None:
+        if message == None:
+            message = input("Enter commit message (or press Enter for 'Pre-pull commit'): ").strip()
+            if not message:
+                message = "Pre-pull commit"
+      
         """Stage all changes and create a commit. Called by the command after its work."""
         if not self.enabled or self.dry_run:
             print(f"[dry-run] Would commit: {message}")
