@@ -1,9 +1,8 @@
 
 import argparse
 
-from lib.autocomplete import package_name_completer
+from lib.autocomplete import file_completer, package_files_completer, package_name_completer
 from lib.recursive_help_formatter import RecursiveHelpFormatter
-from argcomplete.completers import FilesCompleter
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,9 +61,9 @@ Examples:
     create_p.add_argument("name", help="PascalCase package name, e.g. Utils"
         ).completer = lambda prefix, **kw: []
     create_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH"
-        ).completer = FilesCompleter()
+        ).completer = file_completer
     create_p.add_argument("--editor", nargs="+", default=[], metavar="PATH"
-        ).completer = FilesCompleter()
+        ).completer = file_completer
     
     # unity start
     unity_sub.add_parser("start", help="Starts the unity executuble specified in the config file")
@@ -82,19 +81,19 @@ Examples:
     add_p = unity_sub.add_parser("add-files", help="Add files to an existing Unity package")
     add_p.add_argument("name", help="Package name").completer = package_name_completer
     add_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH"
-        ).completer = FilesCompleter()
+        ).completer = file_completer
     add_p.add_argument("--editor", nargs="+", default=[], metavar="PATH"
-        ).completer = FilesCompleter()
+        ).completer = file_completer
 
     # unity remove-files
     rm_p = unity_sub.add_parser("remove-files", help="Remove files from a Unity package")
     rm_p.add_argument("name", help="Package name").completer = package_name_completer
     rm_p.add_argument("--runtime", nargs="+", default=[], metavar="PATH",
                       help="File names (relative to Runtime/) to remove"
-        ).completer = FilesCompleter()
+        ).completer = package_files_completer
     rm_p.add_argument("--editor", nargs="+", default=[], metavar="PATH",
                       help="File names (relative to Editor/) to remove"
-        ).completer = FilesCompleter()
+        ).completer = package_files_completer
 
     # unity list
     unity_sub.add_parser("list", help="List all Unity packages")

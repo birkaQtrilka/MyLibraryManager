@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import subprocess
-from lib.config import get_focused_library, get_library, get_valid_library_path
+from lib.config import Config, get_library, get_valid_library_path
 
 def setup_powershell_autocomplete():
     """Automatically adds argcomplete to the user's PowerShell profile."""
@@ -56,32 +56,65 @@ def package_name_completer(prefix, parsed_args, **kwargs):
     """Complete Unity package names from existing packages"""
     try:
         repo_path = get_valid_library_path(get_library(parsed_args))
-
-        # If we still can't find a repository, abort autocomplete
-        if not repo_path or not Path(repo_path).exists():
-            return []
-
-        config_path = Path(repo_path) / ".libmanrc"
-        
-        unity_dir_name = "Unity"  # Default
-
-        if config_path.exists():
-            try:
-                data = json.loads(config_path.read_text(encoding="utf-8"))
-                # Check potential config keys
-                if "unity_root" in data:
-                    unity_dir_name = data["unity_root"]
-                elif "unity_folder" in data:
-                    unity_dir_name = data["unity_folder"]
-            except Exception:
-                pass
-
-        packages_dir = Path(repo_path) / unity_dir_name
-
-        if packages_dir.exists():
-            return [p.name for p in packages_dir.iterdir()
-                    if p.is_dir() and p.name.startswith(prefix)]
     except Exception:
-        pass
+        return []
+    config_path = Path(repo_path) / ".libmanrc"
+    unity_dir_name = "Unity"  # Default
+
+    data: Config = json.loads(config_path.read_text(encoding="utf-8"))
+    unity_dir_name = data["unity_folder"]
+    
+    packages_dir = Path(repo_path) / unity_dir_name
+    if packages_dir.exists():
+        return [p.name for p in packages_dir.iterdir()
+                if p.is_dir() and p.name.startswith(prefix)]
+    
 
     return []
+
+def package_files_completer(prefix, parsed_args, **kwargs):
+    try:
+        repo_path = get_valid_library_path(get_library(parsed_args))
+    except Exception:
+        return []
+    config_path = Path(repo_path) / ".libmanrc"
+
+    unity_dir_name = "Unity"  # Default
+
+    data: Config = json.loads(config_path.read_text(encoding="utf-8"))
+    unity_dir_name = data["unity_folder"]
+
+    # Figure out which argument (--runtime or --editor) we're completing
+    action = kwargs["action"]
+    if action.dest == "runtime":
+        subfolder = "Runtime"
+    elif action.dest == "editor":
+        subfolder = "Editor"
+    else:
+        return []
+
+    package_name = getattr(parsed_args, "name", None)
+    if not package_name:
+        return []
+
+    target_dir = Path(repo_path) / unity_dir_name / package_name / subfolder
+    if not target_dir.is_dir():
+        return []
+
+    # Only files, filtered by whatever the user has typed so far
+    return [
+        f.name for f in target_dir.iterdir()
+        if f.is_file() and f.name.startswith(prefix)
+    ]
+
+def file_completer(prefix: str, parsed_args=None, **kwargs):
+
+    current_dir = Path.cwd()
+    
+    # Optional: Filter out hidden files (like default bash)
+    files = [
+        f.name for f in current_dir.iterdir()
+        if not f.name.startswith('.') and f.name.startswith(prefix)
+    ]
+    
+    return files
