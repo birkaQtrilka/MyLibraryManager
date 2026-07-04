@@ -149,3 +149,24 @@ def get_valid_library(repo_path: str) -> Config:
     if(config_exists(repo_path)): return load_config(repo_path)
     print("\tERROR: No focused library. run 'libman' focus while in an initialized library to focus", file=sys.stderr)
     sys.exit(1)
+
+def get_valid_library_path(repo_path) -> str:
+    if config_exists(repo_path):
+        return repo_path
+    repo_path = get_focused_library()
+    if(config_exists(repo_path)): return repo_path
+    print("\tERROR: No focused library. run 'libman' focus while in an initialized library to focus", file=sys.stderr)
+    sys.exit(1)
+
+def get_library(parsed_args) -> Optional[str]:
+    # 1. Explicit --repo flag (matches resolve_repo_path priority)
+    if hasattr(parsed_args, 'repo') and parsed_args.repo:
+        return parsed_args.repo
+    else:
+        # 2. Path from terminal location
+        cwd = Path.cwd()
+        if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
+            return str(cwd)
+        # 3. Globally focused library
+        else:
+            return get_focused_library()

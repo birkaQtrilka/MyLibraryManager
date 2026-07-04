@@ -15,10 +15,8 @@ Usage:
 import os
 import sys
 import pyperclip
-from pathlib import Path
-from typing import Optional
 from lib.autocomplete import setup_powershell_autocomplete
-from lib.config import create_config, get_valid_library, set_focused_library, get_focused_library
+from lib.config import create_config, get_library, get_valid_library, set_focused_library, get_focused_library
 from lib.git_ops import GitContext
 from lib.unity.package import (
     cmd_run_unity,
@@ -32,18 +30,6 @@ from lib.unity.package import (
 import argcomplete
 from lib.parser import build_parser
 
-def get_library(parsed_args) -> Optional[str]:
-    # 1. Explicit --repo flag (matches resolve_repo_path priority)
-        if hasattr(parsed_args, 'repo') and parsed_args.repo:
-            return parsed_args.repo
-        else:
-            # 2. Path from terminal location
-            cwd = Path.cwd()
-            if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
-                return str(cwd)
-            # 3. Globally focused library
-            else:
-                return get_focused_library()
 
 def do_visit(args, path):
     if args.copy:

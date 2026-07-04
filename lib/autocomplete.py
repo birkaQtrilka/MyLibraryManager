@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import subprocess
-from lib.config import get_focused_library
+from lib.config import get_focused_library, get_library, get_valid_library_path
 
 def setup_powershell_autocomplete():
     """Automatically adds argcomplete to the user's PowerShell profile."""
@@ -55,19 +55,7 @@ def setup_powershell_autocomplete():
 def package_name_completer(prefix, parsed_args, **kwargs):
     """Complete Unity package names from existing packages"""
     try:
-        repo_path = None
-
-        # 1. Explicit --repo flag from parsed arguments
-        if hasattr(parsed_args, 'repo') and parsed_args.repo:
-            repo_path = parsed_args.repo
-        else:
-            # 2. CWD (current working directory)
-            cwd = Path.cwd()
-            if (cwd / ".libmanrc").exists() or (cwd / ".git").is_dir():
-                repo_path = str(cwd)
-            # 3. Globally focused library
-            else:
-                repo_path = get_focused_library()
+        repo_path = get_valid_library_path(get_library(parsed_args))
 
         # If we still can't find a repository, abort autocomplete
         if not repo_path or not Path(repo_path).exists():
