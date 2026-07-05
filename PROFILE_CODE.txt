@@ -1,0 +1,40 @@
+register-python-argcomplete --shell powershell libman | Out-String | Invoke-Expression
+
+function libman {
+    # Check if 'visit' is one of the arguments
+    if ($args -contains 'visit') {
+        # We are visiting! Capture the output as an array of lines.
+        $output = & libman.exe $args
+        
+        # 1. Extract ONLY the line that starts with a drive letter (e.g. C:\ or D:\)
+        # ^\s*        = Allows optional spaces at the start of the line
+        # [a-zA-Z]:\\ = Matches any drive letter, a colon, and a backslash
+        $pathLine = $output | Where-Object { $_ -match '^\s*[a-zA-Z]:\\' } | Select-Object -First 1
+
+        # 2. Extract the OTHER lines (debug text, warnings, or --help info)
+        $debugLines = $output | Where-Object { $_ -notmatch '^\s*[a-zA-Z]:\\' }
+        
+        # Print the debug text back to the console so you don't lose that info!
+        if ($debugLines) {
+            Write-Host ($debugLines -join "`n")
+        }
+
+        # 3. If we successfully found a path line, try to visit it
+        if ($pathLine) {
+            $pathStr = $pathLine.Trim()
+
+            # Check if it's a valid directory
+            if (Test-Path -LiteralPath $pathStr -PathType Container -ErrorAction SilentlyContinue) {
+                Set-Location -LiteralPath $pathStr
+            } else {
+                # Fallback: Print it if it was an invalid directory
+                Write-Host $pathStr
+            }
+        }
+
+    } else {
+        # For ALL other commands (like 'unity list'), run natively!
+        # This prevents Test-Path errors and preserves terminal colors and live output.
+        & libman.exe $args
+    }
+}
