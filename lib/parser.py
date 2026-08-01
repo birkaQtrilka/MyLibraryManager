@@ -72,6 +72,9 @@ Examples:
     struct_p.add_argument("name", help="Package name (folder under unity_root)").completer = package_name_completer
     struct_p.add_argument("--files", action="store_true", dest="with_files", help="Include individual file names in the tree view")
 
+    git_link_p = unity_sub.add_parser("gitl", help="Copy git link to clipboard, so you can easily add the package in unity")
+    git_link_p.add_argument("name", help="Package name (folder under unity_root)").completer = package_name_completer
+
     # unity delete
     delete_p = unity_sub.add_parser("delete", help="Delete a Unity package")
     delete_p.add_argument("name", help="Package name to delete").completer = package_name_completer

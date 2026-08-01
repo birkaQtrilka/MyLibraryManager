@@ -13,6 +13,7 @@ Usage:
     python libman.py unity list
 """
 import os
+import subprocess
 import sys
 import pyperclip
 from lib.autocomplete import setup_powershell_autocomplete
@@ -41,7 +42,27 @@ def do_visit(args, path):
       print(f"should cd to {path}" )
     else:
         print(path) # code in $PROFILE to handle this command specifically 
-    
+        
+def copy_git_link(cfg, package_path):
+    # Get the repository's origin URL
+    result = subprocess.run(
+        ["git", "config", "--get", "remote.origin.url"],
+        cwd=cfg.unity_root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    origin = result.stdout.strip()
+
+    # Convert Windows path to repo-relative path
+    rel_path = os.path.relpath(package_path, cfg.unity_root)
+    rel_path = rel_path.replace("\\", "/")
+
+    git_link = f"{origin}?path=/Unity/{rel_path}"
+
+    pyperclip.copy(git_link)
+    print(f"Copied \" {git_link} \" to clipboard")
 
 def main():
     parser = build_parser()
@@ -92,6 +113,9 @@ def main():
             return
         elif args.unity_command == "visit":
             do_visit(args, os.path.join(cfg.unity_root, args.name) )
+            return
+        elif args.unity_command == "gitl":
+            copy_git_link(cfg, os.path.join(cfg.unity_root, args.name) )
             return
 
     # All mutating commands use GitContext

@@ -138,8 +138,6 @@ def cmd_unity_delete(
 
 
 # add-files
-
-
 def cmd_unity_add_files(cfg, git, package_name, runtime_files, editor_files, dry_run):
     """Add files to package with namespace enforcement."""
     package_path = cfg.unity_root / package_name

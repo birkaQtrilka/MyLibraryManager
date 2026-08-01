@@ -7,7 +7,7 @@ Example .libmanrc:
     "author_email": "stefan@example.com",
     "package_prefix": "com.steph",
     "assembly_prefix": "steph",
-    "unity_version": "6000",
+    "unity_version": "6000.0",
     "unity_folder": "Unity",
     "remote": "origin",
     "branch": "main"
@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
     "author_email": "",
     "package_prefix": "com.steph",
     "assembly_prefix": "steph",
-    "unity_version": "6000",
+    "unity_version": "6000.0",
     "unity_folder": "Unity",
     "remote": "origin",
     "branch": "main",
