@@ -34,6 +34,7 @@ from lib.parser import build_parser
 from pathlib import Path
 from lib.unity.pull import cmd_unity_pull
 from lib.unity.search import cmd_unity_find
+from lib.unity.picker import cmd_unity_browse
 
 def do_visit(args, path):
     if args.copy:
@@ -124,8 +125,12 @@ def main():
                            args.flat, args.force, args.meta, dry_run)
             return
         elif args.unity_command == "find":
-            cmd_unity_find(cfg, " ".join(args.query), args.package, args.limit,
-                           args.pull, Path.cwd(), dry_run)
+            query = " ".join(args.query)
+            if args.interactive or not query:
+                cmd_unity_browse(cfg, query, args.package, Path.cwd(), dry_run)
+            else:
+                cmd_unity_find(cfg, query, args.package, args.limit,
+                               args.pull, Path.cwd(), dry_run)
             return
 
     # All mutating commands use GitContext

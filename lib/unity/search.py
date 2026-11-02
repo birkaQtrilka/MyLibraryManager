@@ -103,15 +103,29 @@ def iter_package_files(unity_root: Path, package: Optional[str] = None):
                 yield pkg_dir.name, pkg_dir, Path(dirpath) / fn
 
 
-def search(unity_root: Path, query: str, package: Optional[str] = None, limit: int = 20) -> list[SearchResult]:
+def build_index(unity_root: Path, package: Optional[str] = None) -> list[SearchResult]:
+    """Walk the library once; reuse the result for many queries."""
+    return [
+        SearchResult(pkg_name, f.relative_to(pkg_dir).as_posix(), f, 0.0)
+        for pkg_name, pkg_dir, f in iter_package_files(unity_root, package)
+    ]
+
+
+def rank(index: list[SearchResult], query: str, limit: int = 20) -> list[SearchResult]:
+    """Score every entry against `query`. An empty query returns the index in order."""
+    if not query.strip():
+        return index[:limit]
     results = []
-    for pkg_name, pkg_dir, f in iter_package_files(unity_root, package):
-        rel = f.relative_to(pkg_dir).as_posix()
-        s = score_path(query, rel)
+    for entry in index:
+        s = score_path(query, entry.rel_path)
         if s is not None:
-            results.append(SearchResult(pkg_name, rel, f, s))
+            results.append(SearchResult(entry.package, entry.rel_path, entry.abs_path, s))
     results.sort(key=lambda r: -r.score)
     return results[:limit]
+
+
+def search(unity_root: Path, query: str, package: Optional[str] = None, limit: int = 20) -> list[SearchResult]:
+    return rank(build_index(unity_root, package), query, limit)
 
 
 # ------------------------------------------------------------------- command

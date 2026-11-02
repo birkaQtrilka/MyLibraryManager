@@ -110,7 +110,8 @@ Examples:
 
     # unity find  (fuzzy search across all packages)
     find_p = unity_sub.add_parser("find", help="Fuzzy-search files across all packages")
-    find_p.add_argument("query", nargs="+", help="Search terms; all must match (e.g. 'obj pool')")
+    find_p.add_argument("query", nargs="*", help="Search terms; omit to open the interactive picker")
+    find_p.add_argument("-i", "--interactive", action="store_true", help="Open the interactive picker (default when no query is given)")
     find_p.add_argument("-p", "--package", default=None, help="Limit search to one package").completer = package_name_completer
     find_p.add_argument("-n", "--limit", type=int, default=20, help="Max results (default 20)")
     find_p.add_argument("--pull", action="store_true", help="Pick results to copy into the current directory")
