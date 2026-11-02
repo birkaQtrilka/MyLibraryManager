@@ -3,7 +3,7 @@ import argparse
 
 from lib.autocomplete import file_completer, package_files_completer, package_name_completer
 from lib.recursive_help_formatter import RecursiveHelpFormatter
-
+from lib.unity.pull import package_item_completer
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -96,6 +96,24 @@ Examples:
     rm_p.add_argument("--editor", nargs="+", default=[], metavar="PATH",
                       help="File names (relative to Editor/) to remove"
         ).completer = package_files_completer
+
+        # unity pull  (copy files/dirs out of a package into the current directory)
+    pull_p = unity_sub.add_parser("pull", help="Copy files/directories from a package into the current directory")
+    pull_p.add_argument("name", help="Package name").completer = package_name_completer
+    pull_p.add_argument("items", nargs="*", metavar="PATH",
+                        help="Files/dirs relative to the package root, or a bare name to search for. "
+                             "Omit to copy the whole package."
+        ).completer = package_item_completer
+    pull_p.add_argument("--flat", action="store_true", help="Copy a directory's contents directly, without the directory itself")
+    pull_p.add_argument("--force", action="store_true", help="Overwrite existing files")
+    pull_p.add_argument("--meta", action="store_true", help="Also copy Unity .meta files")
+
+    # unity find  (fuzzy search across all packages)
+    find_p = unity_sub.add_parser("find", help="Fuzzy-search files across all packages")
+    find_p.add_argument("query", nargs="+", help="Search terms; all must match (e.g. 'obj pool')")
+    find_p.add_argument("-p", "--package", default=None, help="Limit search to one package").completer = package_name_completer
+    find_p.add_argument("-n", "--limit", type=int, default=20, help="Max results (default 20)")
+    find_p.add_argument("--pull", action="store_true", help="Pick results to copy into the current directory")
 
     # unity list
     unity_sub.add_parser("list", help="List all Unity packages")

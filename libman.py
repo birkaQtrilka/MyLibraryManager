@@ -31,7 +31,9 @@ from lib.unity.package import (
 )
 import argcomplete
 from lib.parser import build_parser
-
+from pathlib import Path
+from lib.unity.pull import cmd_unity_pull
+from lib.unity.search import cmd_unity_find
 
 def do_visit(args, path):
     if args.copy:
@@ -116,6 +118,14 @@ def main():
             return
         elif args.unity_command == "gitl":
             copy_git_link(cfg, os.path.join(cfg.unity_root, args.name) )
+            return
+        elif args.unity_command == "pull":
+            cmd_unity_pull(cfg, args.name, args.items, Path.cwd(),
+                           args.flat, args.force, args.meta, dry_run)
+            return
+        elif args.unity_command == "find":
+            cmd_unity_find(cfg, " ".join(args.query), args.package, args.limit,
+                           args.pull, Path.cwd(), dry_run)
             return
 
     # All mutating commands use GitContext
